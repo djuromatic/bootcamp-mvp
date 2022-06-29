@@ -4,7 +4,7 @@ import { BigNumber, utils } from "ethers";
 import { ethers } from "hardhat";
 
 export const testCampaign = () => {
-  describe("Campains", function () {
+  describe("Campaigns", function () {
     let contract;
     let donations: any;
     let owner: SignerWithAddress;
@@ -13,10 +13,11 @@ export const testCampaign = () => {
     let addr3: SignerWithAddress;
     const nullPointer =
       "0x0000000000000000000000000000000000000000000000000000000000000000";
-    let CAMPAIN_CLOSED: string;
-    let CAMPAIN_ACTIVE: string;
+    let CAMPAIGN_CLOSED: string;
+    let CAMPAIGN_ACTIVE: string;
     let expTime: any;
     const oneEth = utils.parseEther("1.0");
+    const campaignId = 1;
 
     beforeEach(async () => {
       contract = await ethers.getContractFactory("Donations");
@@ -28,8 +29,8 @@ export const testCampaign = () => {
       donations = await contract.deploy();
       await donations.deployed();
 
-      CAMPAIN_CLOSED = await donations.CAMPAIN_CLOSED();
-      CAMPAIN_ACTIVE = await donations.CAMPAIN_ACTIVE();
+      CAMPAIGN_CLOSED = await donations.CAMPAIGN_CLOSED();
+      CAMPAIGN_ACTIVE = await donations.CAMPAIGN_ACTIVE();
 
       await donations.addAdminRole(owner.address);
 
@@ -45,55 +46,58 @@ export const testCampaign = () => {
       );
     });
 
-    it("Should create campain", async () => {
-      const getCampainForAddress = await donations.getCampain(addr3.address);
+    it("Should create campaign", async () => {
+      const getCampaignForAddress = await donations.getCampaign(campaignId);
 
-      const status = await donations.CAMPAIN_ACTIVE();
+      const status = await donations.CAMPAIGN_ACTIVE();
 
       /*
       If not converted to String it is failing
       AssertionError: expected [ 'test', 'test', …(4), …(6) ] to equal [ 'test', 'test', …(4) ]
       + expected - actual
     */
-      expect(getCampainForAddress.toString()).to.be.equal(
-        ["test", "test", expTime, addr3.address, oneEth, status].toString()
+      expect(getCampaignForAddress.toString()).to.be.equal(
+        [
+          "test",
+          "test",
+          expTime,
+          addr3.address,
+          oneEth,
+          status,
+          false,
+        ].toString()
       );
     });
-    it("Should fail to create Campain if user not Admin", async () => {
+    it("Should fail to create Campaign if user not Admin", async () => {
       await donations.removeAdmin(owner.address);
       await expect(
         donations.createCampaign(addr3.address, "test", "test", expTime, oneEth)
       ).to.be.revertedWith("Administrator role required");
     });
-    it("Should fail to create two campains active for same address", async () => {
-      await expect(
-        donations.createCampaign(addr3.address, "test", "test", expTime, oneEth)
-      ).to.be.revertedWith("Campain already exists on this address");
-    });
     it("Should close after founds are collected", async () => {
-      let campain;
-      await donations.connect(addr2).donateToCampain(addr3.address, {
+      let campaign;
+      await donations.connect(addr2).donateToCampaign(campaignId, {
         value: utils.parseEther("0.3"),
       });
-      campain = await donations.getCampain(addr3.address);
-      expect(campain.status).to.be.equal(CAMPAIN_ACTIVE);
+      campaign = await donations.getCampaign(campaignId);
+      expect(campaign.status).to.be.equal(CAMPAIGN_ACTIVE);
 
-      await donations.connect(addr2).donateToCampain(addr3.address, {
+      await donations.connect(addr2).donateToCampaign(campaignId, {
         value: utils.parseEther("0.2"),
       });
-      campain = await donations.getCampain(addr3.address);
-      expect(campain.status).to.be.equal(CAMPAIN_ACTIVE);
+      campaign = await donations.getCampaign(campaignId);
+      expect(campaign.status).to.be.equal(CAMPAIGN_ACTIVE);
 
-      await donations.connect(addr2).donateToCampain(addr3.address, {
+      await donations.connect(addr2).donateToCampaign(campaignId, {
         value: utils.parseEther("0.6"),
       });
-      campain = await donations.getCampain(addr3.address);
-      expect(campain.status).to.be.equal(CAMPAIN_CLOSED);
+      campaign = await donations.getCampaign(campaignId);
+      expect(campaign.status).to.be.equal(CAMPAIGN_CLOSED);
     });
 
     it("Should return exeeded amout after overpaid donation", async () => {
       const balance = await addr2.getBalance();
-      await donations.connect(addr2).donateToCampain(addr3.address, {
+      await donations.connect(addr2).donateToCampaign(campaignId, {
         value: utils.parseEther("2.0"),
       });
 
@@ -106,16 +110,30 @@ export const testCampaign = () => {
     });
 
     it("Should expire after some time", async () => {
-      await donations.connect(addr2).donateToCampain(addr3.address, {
+      await donations.connect(addr2).donateToCampaign(campaignId, {
         value: utils.parseEther("0.1"),
       });
 
       await new Promise((resolve) => setTimeout(resolve, 12000));
       await expect(
-        donations.connect(addr2).donateToCampain(addr3.address, {
+        donations.connect(addr2).donateToCampaign(campaignId, {
           value: utils.parseEther("0.1"),
         })
-      ).to.be.revertedWith("campain has been expired");
+      ).to.be.revertedWith("campaign has ended");
     }).timeout(20000);
+
+    it("Should withdrawal funds from campaign", async () => {
+      await donations.connect(addr2).donateToCampaign(campaignId, {
+        value: utils.parseEther("2"),
+      });
+
+      const contractBallance = await donations.getBalance();
+      expect(contractBallance).to.be.equal(utils.parseEther("1.0"));
+      const campaignWalletBalance = await addr3.getBalance();
+
+      await donations.connect(addr3).withdrawal(campaignId);
+      const campaignWalletBalanceAfter = await addr3.getBalance();
+      expect(campaignWalletBalance).to.be.below(campaignWalletBalanceAfter);
+    });
   });
 };

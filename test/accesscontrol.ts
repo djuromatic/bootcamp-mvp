@@ -12,8 +12,8 @@ export const testAccessControl = () => {
     let addr3: SignerWithAddress;
     const nullPointer =
       "0x0000000000000000000000000000000000000000000000000000000000000000";
-    let CAMPAIN_CLOSED: string;
-    let CAMPAIN_ACTIVE: string;
+    let CAMPAIGN_CLOSED: string;
+    let CAMPAIGN_ACTIVE: string;
     beforeEach(async () => {
       contract = await ethers.getContractFactory("Donations");
       [owner, addr1, addr2, addr3] = await ethers.getSigners();
@@ -24,8 +24,8 @@ export const testAccessControl = () => {
       donations = await contract.deploy();
       await donations.deployed();
 
-      CAMPAIN_CLOSED = await donations.CAMPAIN_CLOSED();
-      CAMPAIN_ACTIVE = await donations.CAMPAIN_ACTIVE();
+      CAMPAIGN_CLOSED = await donations.CAMPAIGN_CLOSED();
+      CAMPAIGN_ACTIVE = await donations.CAMPAIGN_ACTIVE();
     });
 
     it("Should set to right owner", async () => {

@@ -1,29 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.8.0 <0.9.0;
 import "hardhat/console.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 contract Donations {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    bytes32 public constant CAMPAIN_ACTIVE = keccak256("CAMPAIN_ACTIVE");
-    bytes32 public constant CAMPAIN_CLOSED = keccak256("CAMPAIN_CLOSED");
+    bytes32 public constant CAMPAIGN_ACTIVE = keccak256("CAMPAIGN_ACTIVE");
+    bytes32 public constant CAMPAIGN_CLOSED = keccak256("CAMPAIGN_CLOSED");
+
+    using Counters for Counters.Counter;
+    Counters.Counter private campaignId;
+
+    address public _owner;
+
+    receive() external payable {}
 
     constructor() {
         _owner = msg.sender;
+        campaignId.increment();
     }
 
-    struct Campain {
+    struct Campaign {
         string name;
         string description;
         uint256 timeToRise;
         address addr;
         uint256 fundsToRaise;
         bytes32 status;
+        bool fundsTransfered;
     }
 
-    mapping(address => Campain) private campains;
+    mapping(uint256 => Campaign) private campaigns;
     mapping(address => bytes32) private administrators;
-    mapping(address => Campain[]) private archivedCampains;
-    address public _owner;
+    mapping(uint256 => uint256) private cBalances;
 
     modifier isOwner() {
         require(msg.sender == _owner, "Only for owner");
@@ -38,10 +47,31 @@ contract Donations {
         _;
     }
 
-    modifier checkIfExpired(address campain) {
+    modifier checkIfEnded(uint256 id) {
         require(
-            block.timestamp < campains[campain].timeToRise,
-            "campain has been expired"
+            block.timestamp < campaigns[id].timeToRise,
+            "campaign has ended"
+        );
+        _;
+    }
+
+    modifier checkIfStatusClosed(uint256 _id) {
+        require(
+            campaigns[_id].status == CAMPAIGN_CLOSED,
+            "Campaign is still active"
+        );
+        _;
+    }
+
+    modifier ownerOfCampaign(uint256 _id) {
+        require(campaigns[_id].addr == msg.sender, "No access to withdrawal");
+        _;
+    }
+
+    modifier fundsNotTransfered(uint256 _id) {
+        require(
+            campaigns[_id].fundsTransfered == false,
+            "funds already transfered"
         );
         _;
     }
@@ -65,29 +95,23 @@ contract Donations {
         uint256 timeToRise,
         uint256 fundsToRaise
     ) public isAdmin {
-        require(
-            isMappingObjectExists(campaignAddress),
-            "Campain already exists on this address"
-        );
-        campains[campaignAddress] = Campain(
+        campaigns[campaignId.current()] = Campaign(
             name,
             description,
             timeToRise,
             campaignAddress,
             fundsToRaise,
-            CAMPAIN_ACTIVE
+            CAMPAIGN_ACTIVE,
+            false
         );
+        campaignId.increment();
     }
 
-    function donateToCampain(address payable _to)
-        public
-        payable
-        checkIfExpired(_to)
-    {
-        Campain memory camp = campains[_to];
+    function donateToCampaign(uint256 id) public payable checkIfEnded(id) {
+        Campaign memory camp = campaigns[id];
         require(
-            camp.status == CAMPAIN_ACTIVE,
-            "There is no active campain on this address"
+            camp.status == CAMPAIGN_ACTIVE,
+            "There is no active campaign on this address"
         );
         uint256 amount = msg.value;
         if (camp.fundsToRaise < amount) {
@@ -99,29 +123,38 @@ contract Donations {
         } else {
             camp.fundsToRaise -= msg.value;
         }
-        (bool sent, ) = payable(_to).call{value: amount}("");
+        (bool sent, ) = payable(address(this)).call{value: amount}("");
         require(sent, "Failed to send Ether");
-
+        cBalances[id] += amount;
         if (camp.fundsToRaise == 0) {
-            camp.status = CAMPAIN_CLOSED;
-            archivedCampains[_to].push(camp);
+            camp.status = CAMPAIGN_CLOSED;
         }
-        campains[_to] = camp;
+        campaigns[id] = camp;
     }
 
-    function getCampain(address campain) public view returns (Campain memory) {
-        return campains[campain];
+    function withdrawal(uint256 _id)
+        public
+        checkIfStatusClosed(_id)
+        ownerOfCampaign(_id)
+        fundsNotTransfered(_id)
+        checkIfEnded(_id)
+    {
+        uint256 balance = cBalances[_id];
+        payable(msg.sender).transfer(balance);
+        campaigns[_id].fundsTransfered = true;
+        campaigns[_id].status = CAMPAIGN_CLOSED;
+        cBalances[_id] = 0;
     }
 
-    function isMappingObjectExists(address key) private view returns (bool) {
-        if (campains[key].status == CAMPAIN_ACTIVE) {
-            return false;
-        } else {
-            return true;
-        }
+    function getCampaign(uint256 id) public view returns (Campaign memory) {
+        return campaigns[id];
     }
 
     function getBlockTime() public view returns (uint256) {
         return block.timestamp;
+    }
+
+    function getBalance() public view returns (uint256) {
+        return address(this).balance;
     }
 }
