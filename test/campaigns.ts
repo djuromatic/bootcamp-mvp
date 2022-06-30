@@ -69,34 +69,57 @@ export const testCampaign = () => {
 
     it("Should close after founds are collected", async () => {
       let campaign;
-      await donations.connect(addr2).donateToCampaign(campaignId, {
-        value: utils.parseEther("0.3"),
-      });
+      const donationFirstTx = await donations
+        .connect(addr2)
+        .donateToCampaign(campaignId, {
+          value: utils.parseEther("0.3"),
+        });
       campaign = await donations.getCampaign(campaignId);
       expect(campaign.status).to.be.equal(CAMPAIGN_ACTIVE);
+      await expect(donationFirstTx)
+        .to.emit(donations, "DonationDeposited")
+        .withArgs(addr2.address, utils.parseEther("0.3"));
 
-      await donations.connect(addr2).donateToCampaign(campaignId, {
-        value: utils.parseEther("0.2"),
-      });
+      const donationSecondTx = await donations
+        .connect(addr2)
+        .donateToCampaign(campaignId, {
+          value: utils.parseEther("0.2"),
+        });
       campaign = await donations.getCampaign(campaignId);
       expect(campaign.status).to.be.equal(CAMPAIGN_ACTIVE);
+      await expect(donationSecondTx)
+        .to.emit(donations, "DonationDeposited")
+        .withArgs(addr2.address, utils.parseEther("0.2"));
 
-      await donations.connect(addr2).donateToCampaign(campaignId, {
-        value: utils.parseEther("0.6"),
-      });
+      const lastDonationTx = await donations
+        .connect(addr2)
+        .donateToCampaign(campaignId, {
+          value: utils.parseEther("0.6"),
+        });
       campaign = await donations.getCampaign(campaignId);
       expect(campaign.status).to.be.equal(CAMPAIGN_CLOSED);
+      await expect(lastDonationTx)
+        .to.emit(donations, "DonationDeposited")
+        .withArgs(addr2.address, utils.parseEther("0.5"));
+
+      await expect(lastDonationTx)
+        .to.emit(donations, "FundsCollected")
+        .withArgs(1, utils.parseEther("1.0"));
     });
 
     it("Should return exeeded amout after overpaid donation", async () => {
       const balance = await addr2.getBalance();
-      await donations.connect(addr2).donateToCampaign(campaignId, {
-        value: utils.parseEther("2.0"),
-      });
+      const donationTx = await donations
+        .connect(addr2)
+        .donateToCampaign(campaignId, {
+          value: utils.parseEther("2.0"),
+        });
 
       const balanceAfterDonation = await addr2.getBalance();
       const spendedAmount = balance.sub(balanceAfterDonation);
-
+      await expect(donationTx)
+        .to.emit(donations, "DonationAmountReturned")
+        .withArgs(addr2.address, utils.parseEther("1.0"));
       expect(spendedAmount)
         .to.be.above(utils.parseEther("1.0"))
         .and.to.be.below(utils.parseEther("1.001"));
@@ -127,7 +150,7 @@ export const testCampaign = () => {
       const wdTx = await donations.connect(addr3).withdrawal(campaignId);
       const campaignWalletBalanceAfter = await addr3.getBalance();
       expect(campaignWalletBalance).to.be.below(campaignWalletBalanceAfter);
-      expect(wdTx)
+      await expect(wdTx)
         .to.emit(donations, "FundsWithdrawed")
         .withArgs(addr3.address, utils.parseEther("1.0"));
     });

@@ -45,6 +45,7 @@ contract Donations {
         string name
     );
     event DonationDeposited(address indexed donator, uint256 amount);
+    event DonationAmountReturned(address indexed donator, uint256 change);
     event FundsCollected(uint256 campaignId, uint256 fundsCollected);
     event FundsWithdrawed(address indexed receiver, uint256 amount);
 
@@ -141,6 +142,7 @@ contract Donations {
             camp.fundsToRaise = 0;
             (bool success, ) = payable(msg.sender).call{value: change}("");
             require(success, "Failed to send Ether back");
+            emit DonationAmountReturned(msg.sender, change);
         } else {
             camp.fundsToRaise -= msg.value;
         }
