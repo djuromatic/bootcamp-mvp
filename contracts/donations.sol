@@ -62,14 +62,6 @@ contract Donations {
         _;
     }
 
-    modifier checkIfEnded(uint256 id) {
-        require(
-            block.timestamp < campaigns[id].timeToRise,
-            "campaign has ended"
-        );
-        _;
-    }
-
     modifier checkIfStatusClosed(uint256 _id) {
         require(
             campaigns[_id].status == CAMPAIGN_CLOSED,
@@ -87,6 +79,14 @@ contract Donations {
         require(
             campaigns[_id].fundsWithdrawed == false,
             "funds already transfered"
+        );
+        _;
+    }
+
+    modifier isCampaignActive(uint256 _id) {
+        require(
+            campaigns[_id].status == CAMPAIGN_ACTIVE,
+            "There is no active campaign on this address"
         );
         _;
     }
@@ -129,15 +129,15 @@ contract Donations {
         campaignId.increment();
     }
 
-    function donateToCampaign(uint256 id) public payable checkIfEnded(id) {
+    function donateToCampaign(uint256 id) public payable isCampaignActive(id) {
         Campaign memory campaign = campaigns[id];
-        require(
-            campaign.status == CAMPAIGN_ACTIVE,
-            "There is no active campaign on this address"
-        );
+
+        if (block.timestamp > campaign.timeToRise) {
+            campaigns[id].status = CAMPAIGN_CLOSED;
+            revert("campaign expired");
+        }
 
         uint256 amount = returnIfExeededAmount(campaign);
-
         (bool sent, ) = payable(address(this)).call{value: amount}("");
         require(sent, "Failed to send Ether");
         campaign.balance += amount;

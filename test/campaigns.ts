@@ -136,7 +136,7 @@ export const testCampaign = () => {
         donationsContract.connect(user2).donateToCampaign(campaignId, {
           value: utils.parseEther("0.1"),
         })
-      ).to.be.revertedWith("campaign has ended");
+      ).to.be.revertedWith("campaign expired");
     }).timeout(20000);
 
     it("Should withdrawal funds from campaign", async () => {
