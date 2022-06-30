@@ -34,15 +34,23 @@ export const testAccessControl = () => {
     });
 
     it("Should check if adminstrator created and removed", async function () {
-      await donations.addAdminRole(addr1.address);
+      const adminTx = await donations.addAdminRole(addr1.address);
       const adminRoleBytes = await donations.ADMIN_ROLE();
       const getAdminStatus = await donations.checkIfAdministrator(
         addr1.address
       );
       expect(adminRoleBytes).to.be.equal(getAdminStatus);
 
+      expect(adminTx)
+        .to.emit(donations, "AdminCreated")
+        .withArgs(addr1.address);
+
       const removeAdminTx = await donations.removeAdmin(addr1.address);
       await removeAdminTx.wait();
+
+      expect(adminTx)
+        .to.emit(donations, "AdminRemoved")
+        .withArgs(addr1.address);
 
       const getRemovedAdmin = await donations.checkIfAdministrator(
         addr1.address

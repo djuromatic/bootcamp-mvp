@@ -26,13 +26,27 @@ contract Donations {
         uint256 timeToRise;
         address addr;
         uint256 fundsToRaise;
+        uint256 balance;
         bytes32 status;
-        bool fundsTransfered;
+        bool fundsWithdrawed;
     }
 
     mapping(uint256 => Campaign) private campaigns;
     mapping(address => bytes32) private administrators;
-    mapping(uint256 => uint256) private cBalances;
+
+    event AdminCreated(address admin);
+    event AdminRemoved(address admin);
+    event CampaignCreated(
+        address indexed admin,
+        address indexed campaignOwner,
+        uint256 campaignId,
+        uint256 fundsToRaise,
+        bytes32 status,
+        string name
+    );
+    event DonationDeposited(address indexed donator, uint256 amount);
+    event FundsCollected(uint256 campaignId, uint256 fundsCollected);
+    event FundsWithdrawed(address indexed receiver, uint256 amount);
 
     modifier isOwner() {
         require(msg.sender == _owner, "Only for owner");
@@ -70,7 +84,7 @@ contract Donations {
 
     modifier fundsNotTransfered(uint256 _id) {
         require(
-            campaigns[_id].fundsTransfered == false,
+            campaigns[_id].fundsWithdrawed == false,
             "funds already transfered"
         );
         _;
@@ -78,14 +92,12 @@ contract Donations {
 
     function addAdminRole(address admin) public isOwner {
         administrators[admin] = ADMIN_ROLE;
+        emit AdminCreated(admin);
     }
 
     function removeAdmin(address admin) public isOwner {
         administrators[admin] = 0;
-    }
-
-    function checkIfAdministrator(address admin) public view returns (bytes32) {
-        return administrators[admin];
+        emit AdminRemoved(admin);
     }
 
     function createCampaign(
@@ -101,8 +113,17 @@ contract Donations {
             timeToRise,
             campaignAddress,
             fundsToRaise,
+            0,
             CAMPAIGN_ACTIVE,
             false
+        );
+        emit CampaignCreated(
+            msg.sender,
+            campaignAddress,
+            campaignId.current(),
+            fundsToRaise,
+            CAMPAIGN_ACTIVE,
+            name
         );
         campaignId.increment();
     }
@@ -125,11 +146,13 @@ contract Donations {
         }
         (bool sent, ) = payable(address(this)).call{value: amount}("");
         require(sent, "Failed to send Ether");
-        cBalances[id] += amount;
+        camp.balance += amount;
         if (camp.fundsToRaise == 0) {
             camp.status = CAMPAIGN_CLOSED;
+            emit FundsCollected(id, camp.balance);
         }
         campaigns[id] = camp;
+        emit DonationDeposited(msg.sender, amount);
     }
 
     function withdrawal(uint256 _id)
@@ -138,11 +161,17 @@ contract Donations {
         ownerOfCampaign(_id)
         fundsNotTransfered(_id)
     {
-        uint256 balance = cBalances[_id];
+        Campaign memory campaign = campaigns[_id];
+        uint256 balance = campaign.balance;
         payable(msg.sender).transfer(balance);
-        campaigns[_id].fundsTransfered = true;
-        campaigns[_id].status = CAMPAIGN_CLOSED;
-        cBalances[_id] = 0;
+        campaign.fundsWithdrawed = true;
+        campaign.status = CAMPAIGN_CLOSED;
+        campaign.balance = 0;
+        emit FundsWithdrawed(msg.sender, balance);
+    }
+
+    function checkIfAdministrator(address admin) public view returns (bytes32) {
+        return administrators[admin];
     }
 
     function getCampaign(uint256 id) public view returns (Campaign memory) {

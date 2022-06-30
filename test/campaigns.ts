@@ -7,6 +7,7 @@ export const testCampaign = () => {
   describe("Campaigns", function () {
     let contract;
     let donations: any;
+    let createDonationTx: any;
     let owner: SignerWithAddress;
     let addr1: SignerWithAddress;
     let addr2: SignerWithAddress;
@@ -37,7 +38,7 @@ export const testCampaign = () => {
       const blockTime = BigNumber.from(await donations.getBlockTime());
       const oneEth = utils.parseEther("1.0");
       expTime = blockTime.add(10);
-      await donations.createCampaign(
+      createDonationTx = await donations.createCampaign(
         addr3.address,
         "test",
         "test",
@@ -47,33 +48,25 @@ export const testCampaign = () => {
     });
 
     it("Should create campaign", async () => {
-      const getCampaignForAddress = await donations.getCampaign(campaignId);
-
-      const status = await donations.CAMPAIGN_ACTIVE();
-
-      /*
-      If not converted to String it is failing
-      AssertionError: expected [ 'test', 'test', …(4), …(6) ] to equal [ 'test', 'test', …(4) ]
-      + expected - actual
-    */
-      expect(getCampaignForAddress.toString()).to.be.equal(
-        [
-          "test",
-          "test",
-          expTime,
+      await expect(createDonationTx)
+        .to.emit(donations, "CampaignCreated")
+        .withArgs(
+          owner.address,
           addr3.address,
+          1,
           oneEth,
-          status,
-          false,
-        ].toString()
-      );
+          CAMPAIGN_ACTIVE,
+          "test"
+        );
     });
+
     it("Should fail to create Campaign if user not Admin", async () => {
       await donations.removeAdmin(owner.address);
       await expect(
         donations.createCampaign(addr3.address, "test", "test", expTime, oneEth)
       ).to.be.revertedWith("Administrator role required");
     });
+
     it("Should close after founds are collected", async () => {
       let campaign;
       await donations.connect(addr2).donateToCampaign(campaignId, {
@@ -131,9 +124,12 @@ export const testCampaign = () => {
       expect(contractBallance).to.be.equal(utils.parseEther("1.0"));
       const campaignWalletBalance = await addr3.getBalance();
 
-      await donations.connect(addr3).withdrawal(campaignId);
+      const wdTx = await donations.connect(addr3).withdrawal(campaignId);
       const campaignWalletBalanceAfter = await addr3.getBalance();
       expect(campaignWalletBalance).to.be.below(campaignWalletBalanceAfter);
+      expect(wdTx)
+        .to.emit(donations, "FundsWithdrawed")
+        .withArgs(addr3.address, utils.parseEther("1.0"));
     });
 
     it("Should fail to withdrawal if campaign not over", async () => {
