@@ -137,7 +137,6 @@ contract Donations {
         checkIfStatusClosed(_id)
         ownerOfCampaign(_id)
         fundsNotTransfered(_id)
-        checkIfEnded(_id)
     {
         uint256 balance = cBalances[_id];
         payable(msg.sender).transfer(balance);

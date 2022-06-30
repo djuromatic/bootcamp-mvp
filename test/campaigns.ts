@@ -135,5 +135,20 @@ export const testCampaign = () => {
       const campaignWalletBalanceAfter = await addr3.getBalance();
       expect(campaignWalletBalance).to.be.below(campaignWalletBalanceAfter);
     });
+
+    it("Should fail to withdrawal if campaign not over", async () => {
+      await expect(
+        donations.connect(addr3).withdrawal(campaignId)
+      ).to.be.revertedWith("Campaign is still active");
+    });
+
+    it("Should fail to withdrawal user is not owner of campaign", async () => {
+      await donations.connect(addr2).donateToCampaign(campaignId, {
+        value: utils.parseEther("2"),
+      });
+      await expect(
+        donations.connect(addr1).withdrawal(campaignId)
+      ).to.be.revertedWith("No access to withdrawal");
+    });
   });
 };
