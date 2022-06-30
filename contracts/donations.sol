@@ -130,30 +130,25 @@ contract Donations {
     }
 
     function donateToCampaign(uint256 id) public payable checkIfEnded(id) {
-        Campaign memory camp = campaigns[id];
+        Campaign memory campaign = campaigns[id];
         require(
-            camp.status == CAMPAIGN_ACTIVE,
+            campaign.status == CAMPAIGN_ACTIVE,
             "There is no active campaign on this address"
         );
-        uint256 amount = msg.value;
-        if (camp.fundsToRaise < amount) {
-            uint256 change = amount - camp.fundsToRaise;
-            amount = amount - change;
-            camp.fundsToRaise = 0;
-            (bool success, ) = payable(msg.sender).call{value: change}("");
-            require(success, "Failed to send Ether back");
-            emit DonationAmountReturned(msg.sender, change);
-        } else {
-            camp.fundsToRaise -= msg.value;
-        }
+
+        uint256 amount = returnIfExeededAmount(campaign);
+
         (bool sent, ) = payable(address(this)).call{value: amount}("");
         require(sent, "Failed to send Ether");
-        camp.balance += amount;
-        if (camp.fundsToRaise == 0) {
-            camp.status = CAMPAIGN_CLOSED;
-            emit FundsCollected(id, camp.balance);
+        campaign.balance += amount;
+        if (msg.value != amount) {
+            campaign.fundsToRaise = 0;
+            campaign.status = CAMPAIGN_CLOSED;
+            emit FundsCollected(id, campaign.balance);
+        } else {
+            campaign.fundsToRaise -= msg.value;
         }
-        campaigns[id] = camp;
+        campaigns[id] = campaign;
         emit DonationDeposited(msg.sender, amount);
     }
 
@@ -186,5 +181,20 @@ contract Donations {
 
     function getBalance() public view returns (uint256) {
         return address(this).balance;
+    }
+
+    function returnIfExeededAmount(Campaign memory campaign)
+        private
+        returns (uint256)
+    {
+        uint256 amount = msg.value;
+        if (campaign.fundsToRaise < amount) {
+            uint256 change = amount - campaign.fundsToRaise;
+            amount = amount - change;
+            (bool success, ) = payable(msg.sender).call{value: change}("");
+            require(success, "Failed to send Ether back");
+            emit DonationAmountReturned(msg.sender, change);
+        }
+        return amount;
     }
 }
